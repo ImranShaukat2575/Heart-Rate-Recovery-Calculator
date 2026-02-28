@@ -87,5 +87,5 @@ open heart_rate_recovery.html
 python3 -m http.server 8000
 # then visit http://localhost:8000/heart_rate_recovery.html
 
-Disclaimer
+# Disclaimer
 This tool is for informational and educational purposes only. It is not a certified medical device and does not provide medical advice, diagnosis, or treatment. The HRR reference ranges are based on published exercise physiology research but are general guidelines, not clinical thresholds. Always consult a qualified healthcare provider for any concerns about your cardiovascular health.
