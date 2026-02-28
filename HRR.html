@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Heart Rate Recovery Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0c10;
+    --surface: #12151c;
+    --surface-2: #1a1e28;
+    --border: #242a38;
+    --text: #e8ecf4;
+    --text-dim: #7a8399;
+    --pulse: #ff3355;
+    --pulse-glow: rgba(255, 51, 85, 0.25);
+    --pulse-soft: rgba(255, 51, 85, 0.08);
+    --green: #22d68a;
+    --green-glow: rgba(34, 214, 138, 0.2);
+    --amber: #ffb833;
+    --amber-glow: rgba(255, 184, 51, 0.2);
+    --blue: #3388ff;
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  body {
+    font-family: 'Outfit', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(ellipse at 30% 20%, rgba(255,51,85,0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(51,136,255,0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .grain {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.3;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  }
+
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+    animation: fadeUp 0.8s ease both;
+  }
+
+  .header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--pulse-soft);
+    border: 1px solid rgba(255,51,85,0.15);
+    border-radius: 100px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--pulse);
+    margin-bottom: 20px;
+  }
+
+  .header-badge .dot {
+    width: 6px; height: 6px;
+    background: var(--pulse);
+    border-radius: 50%;
+    animation: blink 1.5s ease infinite;
+  }
+
+  .header h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    line-height: 1.1;
+    margin-bottom: 12px;
+  }
+
+  .header h1 span { color: var(--pulse); }
+
+  .header p {
+    color: var(--text-dim);
+    font-size: 16px;
+    font-weight: 300;
+    max-width: 540px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* ── ECG LINE ── */
+  .ecg-wrapper {
+    width: 100%;
+    height: 60px;
+    margin: -10px 0 20px;
+    overflow: hidden;
+    opacity: 0.4;
+  }
+
+  .ecg-line {
+    stroke: var(--pulse);
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 800;
+    stroke-dashoffset: 800;
+    animation: drawEcg 3s linear infinite;
+  }
+
+  @keyframes drawEcg {
+    to { stroke-dashoffset: 0; }
+  }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 5px;
+    margin-bottom: 32px;
+    animation: fadeUp 0.8s ease 0.1s both;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'Outfit', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    background: var(--pulse);
+    color: #fff;
+    box-shadow: 0 4px 20px var(--pulse-glow);
+  }
+
+  .tab svg { width: 16px; height: 16px; }
+
+  .panel { display: none; animation: fadeUp 0.5s ease both; }
+  .panel.active { display: block; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    margin-bottom: 24px;
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .card-title .icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  /* ── INSTRUCTIONS ── */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+  }
+
+  .steps::before {
+    content: '';
+    position: absolute;
+    left: 19px;
+    top: 28px;
+    bottom: 28px;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--pulse), var(--blue), var(--green));
+    border-radius: 2px;
+  }
+
+  .step {
+    display: flex;
+    gap: 20px;
+    padding: 16px 0;
+    position: relative;
+  }
+
+  .step-num {
+    width: 40px; height: 40px;
+    min-width: 40px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--pulse);
+    z-index: 1;
+    transition: all 0.3s ease;
+  }
+
+  .step:hover .step-num {
+    border-color: var(--pulse);
+    box-shadow: 0 0 16px var(--pulse-glow);
+  }
+
+  .step-content h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+  }
+
+  .step-content p {
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.6;
+    font-weight: 300;
+  }
+
+  .tip-box {
+    background: var(--pulse-soft);
+    border: 1px solid rgba(255,51,85,0.12);
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+    margin-top: 20px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .tip-box .emoji { font-size: 20px; flex-shrink: 0; }
+  .tip-box p { font-size: 13px; line-height: 1.6; color: var(--text-dim); }
+  .tip-box strong { color: var(--pulse); }
+
+  /* ── CALCULATOR FORM ── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .form-group.full { grid-column: 1 / -1; }
+
+  .form-group label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  .form-group label span {
+    color: var(--pulse);
+    font-weight: 400;
+    font-size: 11px;
+    margin-left: 4px;
+  }
+
+  .input-wrap {
+    position: relative;
+  }
+
+  .input-wrap input, .input-wrap select {
+    width: 100%;
+    padding: 14px 16px;
+    padding-right: 56px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .input-wrap input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+  .input-wrap input:focus, .input-wrap select:focus {
+    outline: none;
+    border-color: var(--pulse);
+    box-shadow: 0 0 0 3px var(--pulse-glow);
+  }
+
+  .input-unit {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    pointer-events: none;
+  }
+
+  .input-wrap select {
+    padding-right: 16px;
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    font-size: 15px;
+    -webkit-appearance: none;
+  }
+
+  .btn-calculate {
+    grid-column: 1 / -1;
+    padding: 18px 32px;
+    background: var(--pulse);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: #fff;
+    font-family: 'Outfit', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .btn-calculate:hover {
+    box-shadow: 0 8px 32px var(--pulse-glow);
+    transform: translateY(-2px);
+  }
+
+  .btn-calculate:active { transform: translateY(0); }
+
+  .btn-calculate svg { width: 20px; height: 20px; }
+
+  /* ── RESULT ── */
+  .result-area {
+    display: none;
+    margin-top: 28px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .result-area.show { display: block; }
+
+  .result-card {
+    border-radius: var(--radius);
+    padding: 32px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .result-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius);
+    padding: 1px;
+    background: linear-gradient(135deg, var(--result-color, var(--pulse)), transparent 60%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .result-hrr-label {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .result-hrr {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(3rem, 10vw, 5rem);
+    font-weight: 500;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .result-hrr small {
+    font-size: 0.35em;
+    color: var(--text-dim);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+
+  .result-status {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 16px 0 8px;
+    letter-spacing: -0.3px;
+  }
+
+  .result-desc {
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.7;
+    font-weight: 300;
+    max-width: 500px;
+    margin: 0 auto 24px;
+  }
+
+  .result-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .meta-item {
+    text-align: center;
+  }
+
+  .meta-item .label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .meta-item .value {
+    font-family: 'DM Mono', monospace;
+    font-size: 22px;
+    font-weight: 500;
+  }
+
+  /* ── GAUGE ── */
+  .gauge-container {
+    width: 220px;
+    height: 130px;
+    margin: 0 auto 16px;
+    position: relative;
+  }
+
+  .gauge-svg { width: 100%; height: 100%; }
+
+  .gauge-bg {
+    fill: none;
+    stroke: var(--surface-2);
+    stroke-width: 14;
+    stroke-linecap: round;
+  }
+
+  .gauge-fill {
+    fill: none;
+    stroke-width: 14;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1),
+                stroke 0.5s ease;
+  }
+
+  /* ── TIMER ── */
+  .timer-section {
+    text-align: center;
+    padding: 24px 0;
+  }
+
+  .timer-display {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(3.5rem, 12vw, 6rem);
+    font-weight: 300;
+    letter-spacing: 4px;
+    margin: 16px 0;
+    line-height: 1;
+    color: var(--text);
+    transition: color 0.3s;
+  }
+
+  .timer-display.warning { color: var(--amber); }
+  .timer-display.done { color: var(--green); }
+
+  .timer-label {
+    font-size: 14px;
+    color: var(--text-dim);
+    font-weight: 300;
+    margin-bottom: 24px;
+  }
+
+  .timer-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-timer {
+    padding: 14px 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-timer:hover {
+    border-color: var(--pulse);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  }
+
+  .btn-timer.primary {
+    background: var(--pulse);
+    border-color: var(--pulse);
+    color: #fff;
+  }
+
+  .btn-timer.primary:hover {
+    box-shadow: 0 4px 20px var(--pulse-glow);
+  }
+
+  .btn-timer svg { width: 16px; height: 16px; }
+
+  .timer-progress {
+    width: 100%;
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    margin-top: 24px;
+    overflow: hidden;
+  }
+
+  .timer-progress-fill {
+    height: 100%;
+    background: var(--pulse);
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.3s linear, background 0.3s;
+  }
+
+  .timer-progress-fill.done { background: var(--green); }
+
+  /* ── SCALE ── */
+  .scale-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+  }
+
+  .scale-bar {
+    display: flex;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    height: 40px;
+    margin: 16px 0;
+  }
+
+  .scale-segment {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.9);
+    transition: all 0.3s ease;
+    cursor: default;
+    position: relative;
+  }
+
+  .scale-segment:hover { filter: brightness(1.2); }
+
+  .scale-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .scale-marker {
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-bottom: 8px solid var(--text);
+    display: none;
+  }
+
+  /* ── DISCLAIMER ── */
+  .disclaimer {
+    text-align: center;
+    padding: 24px;
+    margin-top: 40px;
+    border-top: 1px solid var(--border);
+  }
+
+  .disclaimer p {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  @keyframes pulseRing {
+    0% { box-shadow: 0 0 0 0 var(--pulse-glow); }
+    100% { box-shadow: 0 0 0 20px rgba(255,51,85,0); }
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .container { padding: 24px 16px 60px; }
+    .card { padding: 24px 20px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .result-meta { grid-template-columns: 1fr; gap: 12px; }
+    .tabs { flex-direction: column; }
+    .timer-buttons { flex-direction: column; align-items: center; }
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<div class="container">
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-badge"><span class="dot"></span> Cardiac Fitness Tool</div>
+    <h1>Heart Rate <span>Recovery</span></h1>
+    <div class="ecg-wrapper">
+      <svg viewBox="0 0 800 60" preserveAspectRatio="none" width="100%" height="60">
+        <path class="ecg-line" d="M0,30 L80,30 L100,30 L110,10 L120,50 L130,5 L140,55 L150,30 L170,30 L250,30 L270,30 L280,10 L290,50 L300,5 L310,55 L320,30 L340,30 L420,30 L440,30 L450,10 L460,50 L470,5 L480,55 L490,30 L510,30 L590,30 L610,30 L620,10 L630,50 L640,5 L650,55 L660,30 L680,30 L800,30"/>
+      </svg>
+    </div>
+    <p>Measure how quickly your heart rate drops after exercise. A faster recovery signals a healthier, more resilient cardiovascular system.</p>
+  </header>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" data-tab="instructions">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/></svg>
+      How To Test
+    </button>
+    <button class="tab" data-tab="timer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      Timer
+    </button>
+    <button class="tab" data-tab="calculator">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      Calculator
+    </button>
+  </div>
+
+  <!-- ═══════ PANEL: INSTRUCTIONS ═══════ -->
+  <div class="panel active" id="panel-instructions">
+    <div class="card">
+      <div class="card-title">
+        <span class="icon" style="background:var(--pulse-soft);color:var(--pulse);">📋</span>
+        Test Protocol — Step by Step
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">01</div>
+          <div class="step-content">
+            <h3>Warm Up (2 minutes)</h3>
+            <p>Start with light movement — walking in place, gentle stretching, or slow marching. This prepares your body and prevents injury during the exercise phase.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">02</div>
+          <div class="step-content">
+            <h3>Exercise Vigorously (3–5 minutes)</h3>
+            <p>Perform brisk exercise to elevate your heart rate to near maximum. Options include: jogging in place, jumping jacks, burpees, stair climbing, or using the 3-minute step test (step up/down on a 12-inch platform at ~96 steps/min).</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">03</div>
+          <div class="step-content">
+            <h3>Record Peak Heart Rate</h3>
+            <p>Immediately after stopping exercise, count your pulse for <strong>15 seconds</strong> and multiply by 4 — or use a fitness watch / pulse oximeter. This is your <strong>Peak HR</strong>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">04</div>
+          <div class="step-content">
+            <h3>Rest for Exactly 1 Minute</h3>
+            <p>Stop all activity. Stand still or sit down (stay consistent — choose one posture for every test). Use the built-in <strong>Timer</strong> tab. Breathe naturally; do not try to control your breathing.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">05</div>
+          <div class="step-content">
+            <h3>Record Recovery Heart Rate</h3>
+            <p>After exactly 1 minute of rest, measure your heart rate again using the same method. This is your <strong>Recovery HR</strong>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">06</div>
+          <div class="step-content">
+            <h3>Calculate Your HRR</h3>
+            <p>Switch to the <strong>Calculator</strong> tab and enter both values. Your Heart Rate Recovery (HRR) = Peak HR − Recovery HR. The tool will give you your fitness assessment instantly.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="tip-box">
+        <span class="emoji">⚠️</span>
+        <p><strong>Safety first:</strong> Do not perform this test if you have a heart condition, chest pain, dizziness, or have been advised against vigorous exercise. Consult your physician before starting any new fitness assessment. Stop immediately if you feel unwell.</p>
+      </div>
+    </div>
+
+    <!-- SCALE REFERENCE -->
+    <div class="scale-card">
+      <div class="card-title">
+        <span class="icon" style="background:var(--green-glow);color:var(--green);">📊</span>
+        HRR Reference Scale (beats dropped in 1 min)
+      </div>
+      <div class="scale-bar">
+        <div class="scale-segment" style="background:#ff3355;">Poor<br>&lt;12</div>
+        <div class="scale-segment" style="background:#ff7733;">Below Avg<br>12–20</div>
+        <div class="scale-segment" style="background:#ffb833;">Average<br>21–30</div>
+        <div class="scale-segment" style="background:#88cc33;">Good<br>31–40</div>
+        <div class="scale-segment" style="background:#22d68a;">Excellent<br>41–50</div>
+        <div class="scale-segment" style="background:#0099cc;">Athlete<br>&gt;50</div>
+      </div>
+      <div class="scale-labels">
+        <span>← Needs Improvement</span>
+        <span>Outstanding →</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ PANEL: TIMER ═══════ -->
+  <div class="panel" id="panel-timer">
+    <div class="card">
+      <div class="card-title">
+        <span class="icon" style="background:var(--amber-glow);color:var(--amber);">⏱</span>
+        1-Minute Recovery Countdown
+      </div>
+      <div class="timer-section">
+        <p class="timer-label">Press start immediately after you stop exercising</p>
+        <div class="timer-display" id="timerDisplay">1:00</div>
+        <div class="timer-progress">
+          <div class="timer-progress-fill" id="timerProgress"></div>
+        </div>
+        <div style="height:24px"></div>
+        <div class="timer-buttons">
+          <button class="btn-timer primary" id="btnStart" onclick="startTimer()">
+            <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            Start
+          </button>
+          <button class="btn-timer" id="btnReset" onclick="resetTimer()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ PANEL: CALCULATOR ═══════ -->
+  <div class="panel" id="panel-calculator">
+    <div class="card">
+      <div class="card-title">
+        <span class="icon" style="background:var(--pulse-soft);color:var(--pulse);">❤️</span>
+        Enter Your Measurements
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Age <span>(optional)</span></label>
+          <div class="input-wrap">
+            <input type="number" id="age" placeholder="30" min="10" max="100">
+            <span class="input-unit">yrs</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Recovery Posture</label>
+          <div class="input-wrap">
+            <select id="posture">
+              <option value="standing">Standing</option>
+              <option value="sitting">Sitting</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Peak Heart Rate <span>(right after exercise)</span></label>
+          <div class="input-wrap">
+            <input type="number" id="peakHR" placeholder="160" min="60" max="230">
+            <span class="input-unit">BPM</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Recovery Heart Rate <span>(after 1 min rest)</span></label>
+          <div class="input-wrap">
+            <input type="number" id="recoveryHR" placeholder="120" min="40" max="220">
+            <span class="input-unit">BPM</span>
+          </div>
+        </div>
+        <button class="btn-calculate" onclick="calculate()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          Calculate HRR
+        </button>
+      </div>
+    </div>
+
+    <!-- RESULT -->
+    <div class="result-area" id="resultArea">
+      <div class="result-card" id="resultCard" style="background:var(--surface);">
+        <div class="gauge-container">
+          <svg class="gauge-svg" viewBox="0 0 200 120">
+            <path class="gauge-bg" d="M20,100 A80,80 0 0,1 180,100"/>
+            <path class="gauge-fill" id="gaugeFill" d="M20,100 A80,80 0 0,1 180,100" stroke="var(--pulse)" stroke-dasharray="251" stroke-dashoffset="251"/>
+          </svg>
+        </div>
+        <div class="result-hrr-label">Heart Rate Recovery</div>
+        <div class="result-hrr" id="resultHRR">—<small>BPM</small></div>
+        <div class="result-status" id="resultStatus">—</div>
+        <p class="result-desc" id="resultDesc"></p>
+        <div class="result-meta">
+          <div class="meta-item">
+            <div class="label">Peak HR</div>
+            <div class="value" id="metaPeak">—</div>
+          </div>
+          <div class="meta-item">
+            <div class="label">Recovery HR</div>
+            <div class="value" id="metaRecov">—</div>
+          </div>
+          <div class="meta-item">
+            <div class="label">% Recovered</div>
+            <div class="value" id="metaPercent">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    <p>This tool is for informational and educational purposes only. It is not a medical device and should not replace professional medical advice, diagnosis, or treatment. Always consult a qualified healthcare provider before beginning any exercise program.</p>
+  </div>
+</div>
+
+<script>
+  // ── TAB SWITCHING ──
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ── TIMER ──
+  let timerInterval = null;
+  let timeLeft = 60;
+  let timerRunning = false;
+
+  function startTimer() {
+    if (timerRunning) return;
+    timerRunning = true;
+    const btn = document.getElementById('btnStart');
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Running...`;
+    btn.style.pointerEvents = 'none';
+    btn.style.opacity = '0.7';
+
+    timerInterval = setInterval(() => {
+      timeLeft--;
+      updateTimerDisplay();
+
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);
+        timerRunning = false;
+        document.getElementById('timerDisplay').classList.add('done');
+        document.getElementById('timerDisplay').textContent = 'DONE!';
+        document.getElementById('timerProgress').classList.add('done');
+        btn.innerHTML = `✓ Complete`;
+
+        try { 
+          if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+        } catch(e) {}
+      }
+    }, 1000);
+  }
+
+  function resetTimer() {
+    clearInterval(timerInterval);
+    timerRunning = false;
+    timeLeft = 60;
+    updateTimerDisplay();
+    const disp = document.getElementById('timerDisplay');
+    disp.classList.remove('done', 'warning');
+    const prog = document.getElementById('timerProgress');
+    prog.classList.remove('done');
+    const btn = document.getElementById('btnStart');
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="5,3 19,12 5,21"/></svg> Start`;
+    btn.style.pointerEvents = '';
+    btn.style.opacity = '';
+  }
+
+  function updateTimerDisplay() {
+    const disp = document.getElementById('timerDisplay');
+    const sec = timeLeft;
+    disp.textContent = `${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;
+    if (sec <= 10 && sec > 0) disp.classList.add('warning');
+    else disp.classList.remove('warning');
+
+    const pct = ((60 - timeLeft) / 60) * 100;
+    document.getElementById('timerProgress').style.width = pct + '%';
+  }
+
+  // ── CALCULATOR ──
+  function calculate() {
+    const peak = parseInt(document.getElementById('peakHR').value);
+    const recovery = parseInt(document.getElementById('recoveryHR').value);
+    const age = parseInt(document.getElementById('age').value) || null;
+
+    if (!peak || !recovery) {
+      shakeInput(!peak ? 'peakHR' : 'recoveryHR');
+      return;
+    }
+    if (peak < 60 || peak > 230) { shakeInput('peakHR'); return; }
+    if (recovery < 40 || recovery > 220) { shakeInput('recoveryHR'); return; }
+    if (recovery >= peak) { shakeInput('recoveryHR'); return; }
+
+    const hrr = peak - recovery;
+    const pctRecovered = ((hrr / (peak - (age ? (220 - age) * 0.5 : 60))) * 100).toFixed(1);
+
+    let status, desc, color;
+    if (hrr >= 50) {
+      status = 'Athlete-Level Recovery'; color = '#0099cc';
+      desc = 'Outstanding cardiovascular fitness. Your autonomic nervous system responds extremely efficiently. This level is common among endurance athletes and highly trained individuals.';
+    } else if (hrr >= 41) {
+      status = 'Excellent Recovery'; color = '#22d68a';
+      desc = 'Your heart recovers rapidly, indicating strong cardiovascular health and good vagal tone. Keep up your exercise routine — your fitness level is well above average.';
+    } else if (hrr >= 31) {
+      status = 'Good Recovery'; color = '#88cc33';
+      desc = 'Your heart rate recovery is healthy and above average. There is room to improve with consistent aerobic training, but your cardiovascular system is functioning well.';
+    } else if (hrr >= 21) {
+      status = 'Average Recovery'; color = '#ffb833';
+      desc = 'Your recovery is within the normal range. Regular aerobic exercise (150+ min/week) can improve this over time. Consider adding interval training to your routine.';
+    } else if (hrr >= 12) {
+      status = 'Below Average Recovery'; color = '#ff7733';
+      desc = 'Your heart is recovering slower than ideal. This may indicate a need for more cardiovascular conditioning. Start with brisk walking 30 min/day and gradually increase intensity.';
+    } else {
+      status = 'Poor Recovery — Consult a Doctor'; color = '#ff3355';
+      desc = 'A recovery of less than 12 BPM may indicate reduced cardiovascular health. Please consult a healthcare professional for a thorough cardiac evaluation before continuing vigorous exercise.';
+    }
+
+    // Show results
+    const area = document.getElementById('resultArea');
+    area.classList.add('show');
+    area.style.display = 'block';
+
+    document.getElementById('resultCard').style.setProperty('--result-color', color);
+    document.getElementById('resultHRR').innerHTML = `${hrr}<small>BPM</small>`;
+    document.getElementById('resultHRR').style.color = color;
+    document.getElementById('resultStatus').textContent = status;
+    document.getElementById('resultStatus').style.color = color;
+    document.getElementById('resultDesc').textContent = desc;
+    document.getElementById('metaPeak').textContent = peak;
+    document.getElementById('metaRecov').textContent = recovery;
+    document.getElementById('metaPercent').textContent = Math.round((hrr / peak) * 100) + '%';
+
+    // Gauge animation
+    const maxHRR = 60;
+    const ratio = Math.min(hrr / maxHRR, 1);
+    const arcLength = 251;
+    const offset = arcLength * (1 - ratio);
+    const gauge = document.getElementById('gaugeFill');
+    gauge.setAttribute('stroke', color);
+    setTimeout(() => { gauge.style.strokeDashoffset = offset; }, 100);
+
+    area.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function shakeInput(id) {
+    const el = document.getElementById(id);
+    el.style.transition = 'none';
+    el.style.borderColor = 'var(--pulse)';
+    el.style.boxShadow = '0 0 0 3px var(--pulse-glow)';
+    el.animate([
+      { transform: 'translateX(-6px)' },
+      { transform: 'translateX(6px)' },
+      { transform: 'translateX(-4px)' },
+      { transform: 'translateX(4px)' },
+      { transform: 'translateX(0)' }
+    ], { duration: 350 });
+    setTimeout(() => {
+      el.style.transition = 'all 0.3s ease';
+      el.style.borderColor = '';
+      el.style.boxShadow = '';
+    }, 1500);
+    el.focus();
+  }
+</script>
+</body>
+</html>
